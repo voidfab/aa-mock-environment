@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  anvil:
+    build:
+      context: ./mock-anvil-node
+      dockerfile: Dockerfile
+    container_name: anvil_container
+    platform: linux/amd64
+    ports:
+      - "8545:8545"
+    env_file:
+      - .env
+    networks:
+      - app-network
+
+  alto:
+    build:
+      context: ./mock-alto-bundler
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: alto_bundler_container
+    ports:
+      # - "3000:3000"
+      - "4337:4337"  # Adjust the ports if needed to match your app
+    environment:
+      - ANVIL_RPC=http://anvil:8545
+    depends_on:
+      - anvil
+    networks:
+      - app-network
+
+  # mock-paymaster:
+  #   image: ghcr.io/pimlicolabs/mock-verifying-paymaster:main
+  #   ports: [ "3000:3000" ]
+  #   environment:
+  #     - ALTO_RPC=http://alto:4337
+  #     - ANVIL_RPC=http://anvil:8545
+  #   networks:
+  #     - app-network
+
+  paymaster:
+    build:
+      context: ./mock-verifying-paymaster
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: verifying_paymaster_container
+    ports:
+      - "3000:3000"  # Adjust the ports if needed to match your app
+    environment:
+      - ALTO_RPC=http://alto:4337
+      - ANVIL_RPC=http://anvil:8545
+    depends_on:
+      - anvil
+      - alto
+    networks:
+      - app-network
+
+  proxy:
+    build:
+      context: ./mock-erc7677-proxy
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: erc7677-proxy-container
+    ports:
+      - "3001:3001"  # Adjust the ports if needed to match your app
+    environment:
+      - PORT=3001
+      - PAYMASTER_SERVICE_URL=http://paymaster:3000
+      # ENTRYPOINT_V06_ENABLED=
+      # ENTRYPOINT_V07_ENABLED=
+      - CHAIN_ID_WHITELIST=31337
+      # PIMLICO_SPONSORSHIP_POLICY_IDS=sp_crazy_kangaroo
+    depends_on:
+      - paymaster
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
